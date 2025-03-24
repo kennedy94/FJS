@@ -46,7 +46,7 @@ The precedence arcs can be visualized as follows:
 
   
   
-## 🚀 How to Run  
+## 🚀 How to Run and Examples
 
 1. **Edit the `Makefile`** to update the path to IBM CPLEX and the path to the source files.  
 2. **Open a terminal** in the folder where the `Makefile` is located.  
@@ -59,21 +59,42 @@ chmod u+x makefile
 ```
 after seed parameter the other parameters are method-dependent.
 
-Here we document each method parameter:
-  - MILP Model
-  - CP Model
+The following methods do not need more parameters
+  - Exact Models
+	- Choose "MODELOMILP" in the sixth parameter for MILP Model
+	- Choose "MODELOCP" in the sixth parameter for CP Model
+	- Example Usage
+		```
+		./FJS -i DAFJS01.txt -o CP-Model-outout.csv -t 60 -a -0.3 -s 91287 -m MODELOCP
+  		./FJS -i DAFJS01.txt -o MILP-Model-outout.csv -t 60 -a -0.3 -s 91287 -m MODELOMILP
+		```
   - Tayebi Genetic Algorithm
+  	- Choose "Tayebi" for the sixth parameter
+   	- Example Usage
+		```
+		./FJS -i DAFJS01.txt -o Tayebi-outout.csv -t 60 -a -0.3 -s 91287 -m Tayebi
+		```
   - Constructive heuristic
+  	- Its value is given in the nineth parameters. Values can be ECT, SPT or Best for the best between ECT and SPT.
+   	- Example Usage
+    		```
+      		./FJS -i DAFJS01.txt -o ECT-outout.csv -t 60 -a -0.3 -s 91287 -ls None -lse None -he ECT -mh None
+      		``` 
   - Local Search
-  - ILS
-  - Tabu Search
-  - Simulated Annealing
-  - GRASP
-
-# Example Usage
-      ```
-      ./FJS -i DAFJS01.txt -o CP-Model-outout.csv -t 60 -a -0.3 -s 91287 -m MODELOCP
-			./FJS -i DAFJS01.txt -o TS-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he Best -mh TS -tol 0 -c 0 -itmax 0 -tsize 9 
+  	- Its value is given in the seventh (Local Search Neighborhood \in {Full, Reduced, CriticalReduced}) and eigthth (Local Search Strategy \in {Best Improvement, First Improvement}) parameters.
+	- Example Usage
+    		```
+      		./FJS -i DAFJS01.txt -o LocalSearchReducedNeiBestImprovECT-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he ECT -mh None
+      		``` 
+  - Metaheuristics:
+	- ILS
+	- Tabu Search
+  		- tolerance	 
+		- Size of Tabu List 
+	- Simulated Annealing
+	- GRASP
+	- Example Usage
+		```
+  			./FJS -i DAFJS01.txt -o TS-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he Best -mh TS -tol 0 -c 0 -itmax 0 -tsize 9 
 			./FJS -i DAFJS01.txt -o SA-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he Best -mh SA -tol 0 -c 0 -itmax -1 --pertMin 3 --pertMax 3 --T0m 0.78 --T0p 0.79 --Tf 0.001 --deltaMin 0.82 --deltaMax 0.82
-
-      ```
+		```
