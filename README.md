@@ -25,7 +25,7 @@ Each instance consists of:
 ### 🔹 Example:  
 
 ```plaintext
-0 0 #auxiliary data
+0 0 # auxiliary data
 5 3 2  # 5 operations, 3 arcs, and 2 machines
 
 0 1    # arc 0, origin and destination
