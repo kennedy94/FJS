@@ -55,7 +55,7 @@ The precedence arcs can be visualized as follows:
 ```bash
 chmod u+x makefile
 ./make
-./FJS instance $instance output $output time-limit $time-limit learning-rate $learning-rate seed $seed
+./FJS -i $instance -o $output -t $time-limit -a $learning-rate -s $seed
 ```
 after seed parameter the other parameters are method-dependent.
 
@@ -71,3 +71,9 @@ Here we document each method parameter:
   - GRASP
 
 # Example Usage
+      ```
+      ./FJS -i DAFJS01.txt -o CP-Model-outout.csv -t 60 -a -0.3 -s 91287 -m MODELOCP
+			./FJS -i DAFJS01.txt -o TS-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he Best -mh TS -tol 0 -c 0 -itmax 0 -tsize 9 
+			./FJS -i DAFJS01.txt -o SA-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he Best -mh SA -tol 0 -c 0 -itmax -1 --pertMin 3 --pertMax 3 --T0m 0.78 --T0p 0.79 --Tf 0.001 --deltaMin 0.82 --deltaMax 0.82
+
+      ```
