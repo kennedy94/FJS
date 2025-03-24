@@ -55,6 +55,19 @@ The precedence arcs can be visualized as follows:
 ```bash
 chmod u+x makefile
 ./make
+./FJS instance $instance output $output time-limit $time-limit learning-rate $learning-rate seed $seed
 ```
+after seed parameter the other parameters are method-dependent.
+
+Here we document each method parameter:
+  - MILP Model
+  - CP Model
+  - Tayebi Genetic Algorithm
+  - Constructive heuristic
+  - Local Search
+  - ILS
+  - Tabu Search
+  - Simulated Annealing
+  - GRASP
 
 # Example Usage
