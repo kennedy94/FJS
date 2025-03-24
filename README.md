@@ -10,35 +10,25 @@ IBM CPLEX 22.1
 
 # Instance format
 
-  \#operations \#arcs \#machines
-  
-  for each arc:
-    origin destination
-    
-  for each operation:  
-    \#machines that can process operation
-    for each machine that can process operation:
-      machine processing-time 
-  
   Example:
   
-  5 3 2
+  5 3 2  # 5 operations, 3 arcs, and 2 machines
   
-  0 1
+  0 1 # arc 0, origin and destination
   
-  0 2
+  0 2 # arc 1, origin and destination
   
-  3 4
+  3 4 # arc 2, origin and destination
 
-  2 0 1 1 2
+  2 0 1 1 2 # 2 machines can process operation 0, machine 0 with processing time 1, machine 1 with processing time 2
   
-  1 1 2
+  1 1 2 # 1 machine can process operation 1, machine 1 with processing time 2
   
-  2 0 1 1 2
+  2 0 1 1 2 # 2 machines can process operation 2, machine 0 with processing time 1, machine 1 with processing time 2
   
-  1 0 1
+  1 0 1 # 1 machine can process operation 3, machine 1 with processing time 2
   
-  2 0 1 1 2
+  2 0 1 1 2 # 2 machines can process operation 4, machine 0 with processing time 1, machine 1 with processing time 2
   
   
 ![graph](https://github.com/user-attachments/assets/e97ff7c0-2016-4de1-bea9-175c26381aa8)
