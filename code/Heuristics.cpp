@@ -588,26 +588,29 @@ SolutionGraph SA(Cenario& FJSSFLE, string localSearch, string localSearchStrateg
 
 SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCriticalOperations)
 {
-	auto tic = std::chrono::high_resolution_clock::now();
+	auto tic = std::chrono::high_resolution_clock::now(); // Start the timer
 
 	SolutionGraph G, Gbest, GSPT, GECT;
+	list<Moviment> TabuList; // List of tabu movements
 
-	list<Moviment> TabuList;
-
+	// Generate initial solutions using SPT and ECT heuristics
 	GSPT = SPT(FJSSFLE);
 	GECT = ECT(FJSSFLE);
 
+	// Choose the best initial solution
 	G = (GSPT.makespan < GECT.makespan) ? GSPT : GECT;
 	Gbest = G;
 
+	// Compute the size of the tabu list based on problem characteristics
 	int newListSizeMax = (int)ceil((G.nNodes - 2 + G.nMachines) * listSizeMax / 10);
 
-	string
-		saidaDetalhada = "detailed" + FJSSFLE.outputName;
+	// Define the output file name for detailed logs
+	string saidaDetalhada = "detailed" + FJSSFLE.outputName;
 
 	int nNodes = G.nNodes;
-	double ultima_melhora = 0.0;
+	double ultima_melhora = 0.0; // Timestamp of the last improvement
 
+	// Write the initial solution to the log file
 	{
 		ofstream outfile(saidaDetalhada, fstream::app);
 		outfile << "TS," << FJSSFLE.learningRate << "," << FJSSFLE.inputName << "," << Gbest.makespan << "," << 0.0 << "," << FJSSFLE.seed << endl;
@@ -615,38 +618,48 @@ SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCritic
 	}
 
 	while (true) {
+		// Check time limit
 		auto toc = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - tic).count() / 1000.0;
 		if (toc >= FJSSFLE.timeLimit)
 			break;
 
+		// Stop if no improvement in the last 5 seconds during tuning
 		if (tuning && (toc - ultima_melhora) > 5.0)
 			break;
 
+		// Copy critical operations and topological sorting for further processing
 		for (int i = 0; i < nNodes; i++) {
 			isCriticalOpG[i] = G.isACriticalOp[i];
 			GTopologicalSorting[i] = G.uu[i];
 		}
+
 		int makespanLine = FJSSFLE.BIG_M;
 		Moviment movimentoLine;
 
+		// Iterate through all nodes to explore possible movements
 		for (int i = 0; i < nNodes; i++)
 		{
 			int v = GTopologicalSorting[i];
+
+			// Skip non-critical operations (if applicable) and the first/last node
 			if ((onlyCriticalOperations && !isCriticalOpG[v]) || v == 0 || v == nNodes - 1)
 				continue;
 
+			// Store the original position and machine of operation v
 			int ellAntigo = G.positions[v],
 				kAntigo = G.ff[v],
 				MakespanG = G.makespan;
 
+			// Remove the operation from its current position
 			G.RemoveOperation(FJSSFLE, v);
 
+			// Try inserting the operation into different machines and positions
 			for (auto& k : FJSSFLE.F[v - 1])
 			{
-				int
-					gamma_lb = 1,
-					gamma_ub = (int)G.Machines[k].size() + 1;
+				int gamma_lb = 1, // Lower bound for position
+					gamma_ub = (int)G.Machines[k].size() + 1; // Upper bound for position
 
+				// Determine insertion bounds based on precedence constraints
 				for (int ell = 0; ell < (int)G.Machines[k].size(); ell++)
 				{
 					int operation = G.Machines[k][ell];
@@ -656,24 +669,29 @@ SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCritic
 						gamma_ub = G.positions[operation];
 				}
 
+				// Prevent worsening the makespan unnecessarily
 				if (G.makespan >= MakespanG)
 					gamma_ub = min(gamma_ub, G.lastCriticalPosition[k]);
 
+				// Test all feasible positions within the computed bounds
 				for (int ell = gamma_lb; ell <= gamma_ub; ell++)
 				{
 					G.InsertOperation(FJSSFLE, v, ell, k);
 					Moviment movimento = Moviment(v, k, ell);
 
+					// Select the best non-tabu move or an improving move
 					if ((G.makespan < makespanLine && (find(TabuList.begin(), TabuList.end(), movimento) == TabuList.end())) || (G.makespan < Gbest.makespan)) {
 						makespanLine = G.makespan;
 						movimentoLine = movimento;
 					}
-					G.RemoveOperation(FJSSFLE, v);
+					G.RemoveOperation(FJSSFLE, v); // Undo move for the next test
 				}
 			}
+			// Restore the original position of the operation
 			G.InsertOperation(FJSSFLE, v, ellAntigo, kAntigo);
 		}
 
+		// If the chosen move is in the tabu list, remove it; otherwise, add it
 		auto it = find(TabuList.begin(), TabuList.end(), movimentoLine);
 		if (it != TabuList.end())
 		{
@@ -683,23 +701,28 @@ SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCritic
 			TabuList.push_back(movimentoLine);
 		}
 
+		// Maintain the tabu list size
 		if ((int)TabuList.size() > newListSizeMax)
 			TabuList.pop_front();
-		
+
+		// If no valid move was found, continue to the next iteration
 		if (movimentoLine.i == -1 && movimentoLine.ell == -1 && movimentoLine.k == -1) {
 			continue;
 		}
 		else {
+			// Apply the best move found
 			G.RemoveOperation(FJSSFLE, movimentoLine.i);
 			G.InsertOperation(FJSSFLE, movimentoLine.i, movimentoLine.ell, movimentoLine.k);
 		}
 
-		//atualiza Gbest
+		// Update the best solution found so far
 		if (makespanLine < Gbest.makespan) {
 			Gbest = G;
 			auto toc = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - tic).count() / 1000.0;
 			Gbest.timeToGetSolution = toc;
 			ultima_melhora = toc;
+
+			// Write the improvement to the log file
 			ofstream outfile(saidaDetalhada, fstream::app);
 			outfile << "TS," << FJSSFLE.learningRate << "," << FJSSFLE.inputName << "," << Gbest.makespan << "," << toc << "," << FJSSFLE.seed << endl;
 			outfile.close();
@@ -710,6 +733,7 @@ SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCritic
 		}
 	}
 
+	// Final log update
 	auto toc = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - tic).count() / 1000.0;
 	if (IMPRIMIR_ARQUIVO) {
 		ofstream outfile(saidaDetalhada, fstream::app);
@@ -717,22 +741,25 @@ SolutionGraph TS(Cenario& FJSSFLE, int listSizeMax, bool tuning, bool onlyCritic
 		outfile.close();
 	}
 
-	return Gbest;
+	return Gbest; // Return the best solution found
 }
 
 SolutionGraph GRASP(Cenario& FJSSFLE, string localSearchStrategy, double alphaGrasp, double tolerancy, bool tuning, bool onlyCriticalOperations)
 {
-	auto tic = std::chrono::high_resolution_clock::now();
+	auto tic = std::chrono::high_resolution_clock::now(); // Start the timer
 
-	SolutionGraph G1, G2, G, Gbest, Gbest_;
+	SolutionGraph G1, G2, G, Gbest;
+
+	// Generate initial solutions using randomized heuristics
 	G1 = RandomizedECT(FJSSFLE, 0.0);
-	G = ECT(FJSSFLE);
 	G2 = RandomizedSPT(FJSSFLE, 0.0);
-	G = SPT(FJSSFLE);
-	Gbest = G1.makespan < G2.makespan ? G1 : G2;
-	double C_max_Best = Gbest.makespan;
-	string
-		saidaDetalhada = "detailed" + FJSSFLE.outputName;
+
+	// Choose the best of the two initial solutions
+	Gbest = (G1.makespan < G2.makespan) ? G1 : G2;
+	double C_max_Best = Gbest.makespan; // Best makespan found
+
+	// Prepare the output file name
+	string saidaDetalhada = "detailed" + FJSSFLE.outputName;
 	size_t pos = saidaDetalhada.find(".txt");
 	if (pos != string::npos)
 		saidaDetalhada.erase(pos, 4);
@@ -740,31 +767,40 @@ SolutionGraph GRASP(Cenario& FJSSFLE, string localSearchStrategy, double alphaGr
 	if (pos != string::npos)
 		saidaDetalhada.erase(pos, 10);
 
-	int itSemMelhora = 0, iteration = 0;
+	int itSemMelhora = 0, iteration = 0; // Counters for stagnation and iterations
 
+	// Log the initial solution
 	{
 		ofstream outfile(saidaDetalhada, fstream::app);
 		outfile << "GRASP," << FJSSFLE.learningRate << "," << FJSSFLE.inputName << "," << Gbest.makespan << "," << 0 << "," << FJSSFLE.seed << endl;
 		outfile.close();
 	}
 
-	int ell = 1;
-	double ultima_melhora = 0.0;
+	int ell = 1; // Iteration counter
+	double ultima_melhora = 0.0; // Timestamp of the last improvement
 
+	// Main GRASP loop
 	while (true) {
-		bool melhora = false;
+		bool melhora = false; // Tracks if there was an improvement
+
+		// Check time limit
 		auto toc = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - tic).count() / 1000.0;
 		if (toc >= FJSSFLE.timeLimit)
 			break;
+
+		// Stop if no improvement in the last 5 seconds during tuning
 		if (tuning && (toc - ultima_melhora) > 5.0)
 			break;
 
+		// Generate two new solutions using the randomized heuristic
 		G1 = RandomizedECT(FJSSFLE, alphaGrasp);
 		G2 = RandomizedSPT(FJSSFLE, alphaGrasp);
-		G = G1.makespan < G2.makespan ? G1 : G2;
+		G = (G1.makespan < G2.makespan) ? G1 : G2;
 
+		// Apply local search to improve the solution
 		G = LocalSearch(FJSSFLE, G, localSearchStrategy, tolerancy, tic, onlyCriticalOperations);
 
+		// If the new solution is better, update the best solution found
 		if (G.makespan < C_max_Best) {
 			melhora = true;
 			Gbest = G;
@@ -772,101 +808,110 @@ SolutionGraph GRASP(Cenario& FJSSFLE, string localSearchStrategy, double alphaGr
 			auto toc = chrono::duration_cast<chrono::milliseconds>(chrono::high_resolution_clock::now() - tic).count() / 1000.0;
 			Gbest.timeToGetSolution = toc;
 			ultima_melhora = toc;
+
+			// Log the improvement
 			ofstream outfile(saidaDetalhada, fstream::app);
 			outfile << "GRASP," << FJSSFLE.learningRate << "," << FJSSFLE.inputName << "," << Gbest.makespan << "," << toc << "," << FJSSFLE.seed << endl;
 			outfile.close();
 			iteration++;
 		}
+
+		// Update stagnation counter
 		if (melhora)
 			itSemMelhora = 0;
 		else
 			itSemMelhora++;
-		ell++;
-	}
-	/*if (onlyCriticalOperations)
-		Gbest = LocalSearch(FJSSFLE, Gbest, localSearch, localSearchStrategy, 0.0, tic);*/
 
-	return Gbest;
+		ell++; // Increment iteration counter
+	}
+
+	// Optional: Final local search for critical operations (currently commented out)
+	// if (onlyCriticalOperations)
+	//     Gbest = LocalSearch(FJSSFLE, Gbest, localSearchStrategy, 0.0, tic);
+
+	return Gbest; // Return the best solution found
 }
 
-SolutionGraph RandomizedECT(Cenario& FJSSFLE, double alphaGrasp) {
-	SolutionGraph G = SolutionGraph(FJSSFLE);
 
+SolutionGraph RandomizedECT(Cenario& FJSSFLE, double alphaGrasp) {
+	SolutionGraph G = SolutionGraph(FJSSFLE); // Initialize the solution graph
+
+	// Vectors for tracking operation readiness, machine readiness, and completion times
 	vector<int>
-		r_op(G.nNodes, FJSSFLE.BIG_M),
-		r_mac(FJSSFLE.nMachines, 0),
-		c(G.nNodes, FJSSFLE.BIG_M);
-	r_op[0] = 0;
+		r_op(G.nNodes, FJSSFLE.BIG_M), // Ready times for operations
+		r_mac(FJSSFLE.nMachines, 0),   // Ready times for machines
+		c(G.nNodes, FJSSFLE.BIG_M);    // Completion times for operations
+
+	r_op[0] = 0; // The first operation is ready at time 0
 	c[0] = 0;
 
-	vector< int>
-		g(FJSSFLE.nMachines, 1);
+	vector<int> g(FJSSFLE.nMachines, 1); // Machine usage counters
 
-	vector<bool> isScheduled(G.nNodes, false);
-	isScheduled[0] = true;
+	vector<bool> isScheduled(G.nNodes, false); // Track scheduled operations
+	isScheduled[0] = true; // First operation is scheduled
 
+	// Set of operations that are not yet scheduled
 	set<int> notScheduled;
 	for (int i = 1; i < G.nNodes - 1; i++)
 		notScheduled.insert(i);
 
-	while (!notScheduled.empty())
-	{
-		int v_hat = -1, k_hat = -1;
-		double
-			minCompletionTime = FJSSFLE.BIG_M,
-			maxCompletionTime = 0;
+	// Main scheduling loop
+	while (!notScheduled.empty()) {
+		int v_hat = -1, k_hat = -1; // Chosen operation and machine
+		double minCompletionTime = FJSSFLE.BIG_M, maxCompletionTime = 0;
 
-		vector<vector<double>> completionTimes(FJSSFLE.nOperations);
+		// Initialize completion time matrix
+		vector<vector<double>> completionTimes(FJSSFLE.nOperations, vector<double>(FJSSFLE.nMachines, FJSSFLE.BIG_M));
 
-		for (int i = 0; i < FJSSFLE.nOperations; i++)
-			completionTimes[i] = vector<double>(FJSSFLE.nMachines, FJSSFLE.BIG_M);
+		vector<int> ReadyOperations;
 
-		vector< int> ReadyOperations;
-		for (auto& v : notScheduled)
-		{
+		// Find operations that are ready to be scheduled
+		for (auto& v : notScheduled) {
 			bool isReady = true;
 			int readyTime = 0;
+
+			// Check if all predecessor operations are scheduled
 			for (auto& i : FJSSFLE.AdjBack[v - 1]) {
 				if (!isScheduled[i + 1]) {
 					isReady = false;
 					break;
 				}
-				if (c[i + 1] > readyTime)
-					readyTime = c[i + 1];
+				readyTime = max(readyTime, c[i + 1]);
 			}
+
 			if (isReady) {
 				ReadyOperations.push_back(v);
 				r_op[v] = readyTime;
 			}
 		}
-		for (auto& v : notScheduled)
-		{
-			for (auto& k : FJSSFLE.F[v - 1])
-			{
+
+		// Calculate possible completion times for each ready operation
+		for (auto& v : notScheduled) {
+			for (auto& k : FJSSFLE.F[v - 1]) {
 				double realProcessingTime = FJSSFLE.learningFunction(FJSSFLE.ProcessingTimes[v - 1][k], g[k], FJSSFLE.learningRate);
 				double startingTime = max(r_op[v], r_mac[k]);
 
 				completionTimes[v - 1][k] = startingTime + realProcessingTime;
-				if (completionTimes[v - 1][k] < minCompletionTime)
-					minCompletionTime = completionTimes[v - 1][k];
-
-				if (completionTimes[v - 1][k] > maxCompletionTime)
-					maxCompletionTime = completionTimes[v - 1][k];
+				minCompletionTime = min(minCompletionTime, completionTimes[v - 1][k]);
+				maxCompletionTime = max(maxCompletionTime, completionTimes[v - 1][k]);
 			}
 		}
 
+		// Create Restricted Candidate List (RCL) based on alphaGrasp parameter
 		vector<Moviment> RCL;
-		for (auto& v : ReadyOperations)
-		{
+		for (auto& v : ReadyOperations) {
 			for (auto& k : FJSSFLE.F[v - 1]) {
 				if (completionTimes[v - 1][k] <= minCompletionTime + alphaGrasp * (maxCompletionTime - minCompletionTime))
 					RCL.push_back(Moviment(v, k));
 			}
 		}
-		int chosenMoviment = alphaGrasp == 0.0 ? 0 : rand() % ((int)RCL.size());
+
+		// Choose a movement from RCL: either deterministic (alphaGrasp == 0) or randomized
+		int chosenMoviment = (alphaGrasp == 0.0) ? 0 : rand() % ((int)RCL.size());
 		v_hat = RCL[chosenMoviment].i;
 		k_hat = RCL[chosenMoviment].k;
 
+		// Schedule the selected operation on the selected machine
 		G.weight[v_hat] = FJSSFLE.learningFunction(FJSSFLE.ProcessingTimes[v_hat - 1][k_hat], g[k_hat], FJSSFLE.learningRate);
 		G.ff[v_hat] = k_hat;
 		c[v_hat] = max(r_op[v_hat], r_mac[k_hat]) + G.weight[v_hat];
@@ -875,111 +920,109 @@ SolutionGraph RandomizedECT(Cenario& FJSSFLE, double alphaGrasp) {
 		G.st[v_hat] = max(r_op[v_hat], r_mac[k_hat]);
 		g[k_hat]++;
 
-		if (!G.Machines[k_hat].empty())
-		{
+		// Update adjacency list for dependency tracking
+		if (!G.Machines[k_hat].empty()) {
 			G.AdjList[G.Machines[k_hat].back()].push_back(SolutionNode(v_hat, k_hat, G.weight[v_hat]));
 		}
 		G.Machines[k_hat].push_back(v_hat);
+
+		// Mark operation as scheduled and remove from pending list
 		notScheduled.erase(v_hat);
 		isScheduled[v_hat] = true;
-		//cout << "(" << v_hat << "," << k_hat << ")" << endl;
 	}
+
+	// Compute the critical path of the final schedule
 	G.CriticalPath(FJSSFLE);
-	return G;
+
+	return G; // Return the constructed solution
 }
 
 SolutionGraph RandomizedSPT(Cenario& FJSSFLE, double alphaGrasp) {
-	SolutionGraph G = SolutionGraph(FJSSFLE);
+	SolutionGraph G = SolutionGraph(FJSSFLE); // Initialize the solution graph
 
+	// Vectors for tracking operation readiness, machine readiness, and completion times
 	vector<int>
-		r_op(G.nNodes, FJSSFLE.BIG_M),
-		r_mac(FJSSFLE.nMachines, 0),
-		c(G.nNodes, FJSSFLE.BIG_M);
-	r_op[0] = 0;
+		r_op(G.nNodes, FJSSFLE.BIG_M), // Ready times for operations
+		r_mac(FJSSFLE.nMachines, 0),   // Ready times for machines
+		c(G.nNodes, FJSSFLE.BIG_M);    // Completion times for operations
+
+	r_op[0] = 0; // The first operation is ready at time 0
 	c[0] = 0;
 
-	vector< int>
-		g(FJSSFLE.nMachines, 1);
+	vector<int> g(FJSSFLE.nMachines, 1); // Machine usage counters
 
-	vector<bool> isScheduled(G.nNodes, false);
-	isScheduled[0] = true;
+	vector<bool> isScheduled(G.nNodes, false); // Track scheduled operations
+	isScheduled[0] = true; // First operation is scheduled
 
+	// Set of operations that are not yet scheduled
 	set<int> notScheduled;
 	for (int i = 1; i < G.nNodes - 1; i++)
 		notScheduled.insert(i);
 
-	while (!notScheduled.empty())
-	{
-		int v_hat = -1, k_hat = -1;
-		int
-			minProcessingTime = FJSSFLE.BIG_M,
-			maxProcessingTime = 0;
+	// Main scheduling loop
+	while (!notScheduled.empty()) {
+		int v_hat = -1, k_hat = -1; // Chosen operation and machine
+		int minProcessingTime = FJSSFLE.BIG_M, maxProcessingTime = 0;
 
 		vector<int> ReadyOperations;
-
 		int r_min = FJSSFLE.BIG_M;
-		for (auto& v : notScheduled)
-		{
+
+		// Identify operations that are ready to be scheduled
+		for (auto& v : notScheduled) {
 			bool isReady = true;
 			int readyTime = 0;
+
+			// Check if all predecessor operations are scheduled
 			for (auto& i : FJSSFLE.AdjBack[v - 1]) {
 				if (!isScheduled[i + 1]) {
 					isReady = false;
 					break;
 				}
-				if (c[i + 1] > readyTime)
-					readyTime = c[i + 1];
+				readyTime = max(readyTime, c[i + 1]);
 			}
+
 			if (isReady) {
 				r_op[v] = readyTime;
 				ReadyOperations.push_back(v);
 
-				for (auto& k : FJSSFLE.F[v - 1])
-				{
-					if (r_min > max(r_op[v], r_mac[k]))
-						r_min = max(r_op[v], r_mac[k]);
+				// Find the earliest start time among all machines
+				for (auto& k : FJSSFLE.F[v - 1]) {
+					r_min = min(r_min, max(r_op[v], r_mac[k]));
 				}
 			}
 		}
 
+		// Generate the set of eligible moves
 		vector<Moviment> E;
-		for (auto& v : ReadyOperations)
-		{
-			for (auto& k : FJSSFLE.F[v - 1])
-			{
-				if (r_min == max(r_op[v], r_mac[k]))
-				{
+		for (auto& v : ReadyOperations) {
+			for (auto& k : FJSSFLE.F[v - 1]) {
+				if (r_min == max(r_op[v], r_mac[k])) {
 					E.push_back(Moviment(v, k));
 					int realProcessingTime = FJSSFLE.learningFunction(FJSSFLE.ProcessingTimes[v - 1][k], g[k], FJSSFLE.learningRate);
 
-					if (realProcessingTime < minProcessingTime)
-					{
-						minProcessingTime = realProcessingTime;
-					}
-					if (realProcessingTime > maxProcessingTime)
-					{
-						maxProcessingTime = realProcessingTime;
-					}
+					minProcessingTime = min(minProcessingTime, realProcessingTime);
+					maxProcessingTime = max(maxProcessingTime, realProcessingTime);
 				}
 			}
 		}
 
+		// Create Restricted Candidate List (RCL) based on alphaGrasp parameter
 		vector<Moviment> RCL;
-		for (auto& moviment : E)
-		{
-			int
-				v = moviment.i,
-				k = moviment.k;
-
+		for (auto& moviment : E) {
+			int v = moviment.i, k = moviment.k;
 			double realProcessingTime = FJSSFLE.learningFunction(FJSSFLE.ProcessingTimes[v - 1][k], g[k], FJSSFLE.learningRate);
 
-			if (realProcessingTime <= minProcessingTime + alphaGrasp * (maxProcessingTime - minProcessingTime))
+			if (realProcessingTime <= minProcessingTime + alphaGrasp * (maxProcessingTime - minProcessingTime)) {
 				RCL.push_back(Moviment(v, k));
+			}
 		}
-		int chosenMoviment = alphaGrasp == 0.0 ? 0 : rand() % ((int)RCL.size());
+
+		// Choose a movement from RCL: either deterministic (alphaGrasp == 0) or randomized
+		int chosenMoviment = (alphaGrasp == 0.0) ? 0 : rand() % ((int)RCL.size());
 		v_hat = RCL[chosenMoviment].i;
 		k_hat = RCL[chosenMoviment].k;
 
+		// Schedule the selected operation on the selected machine
 		G.weight[v_hat] = FJSSFLE.learningFunction(FJSSFLE.ProcessingTimes[v_hat - 1][k_hat], g[k_hat], FJSSFLE.learningRate);
 		G.ff[v_hat] = k_hat;
 		c[v_hat] = r_min + G.weight[v_hat];
@@ -988,15 +1031,19 @@ SolutionGraph RandomizedSPT(Cenario& FJSSFLE, double alphaGrasp) {
 		G.st[v_hat] = r_min;
 		g[k_hat]++;
 
-		if (!G.Machines[k_hat].empty())
-		{
+		// Update adjacency list for dependency tracking
+		if (!G.Machines[k_hat].empty()) {
 			G.AdjList[G.Machines[k_hat].back()].push_back(SolutionNode(v_hat, k_hat, G.weight[v_hat]));
 		}
 		G.Machines[k_hat].push_back(v_hat);
+
+		// Mark operation as scheduled and remove from pending list
 		notScheduled.erase(v_hat);
 		isScheduled[v_hat] = true;
-		//cout << "(" << v_hat << "," << k_hat << ")" << endl;
 	}
+
+	// Compute the critical path of the final schedule
 	G.CriticalPath(FJSSFLE);
-	return G;
+
+	return G; // Return the constructed solution
 }
