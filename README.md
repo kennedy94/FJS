@@ -82,14 +82,14 @@ The following methods do not need more parameters
   	- Its value is given in the nineth parameters. Values can be ECT, SPT or Best for the best between ECT and SPT.
    	- Example Usage
       
-      		./FJS -i DAFJS01.txt -o ECT-outout.csv -t 60 -a -0.3 -s 91287 -ls None -lse None -he ECT -mh None
+      		./FJS -i DAFJS01.txt -o ECT-outout.csv -t 60 -a -0.3 -s 91287 -ls None -lse None -he ECT -mh None 
       		
       
   - Local Search
   	- Its value is given in the seventh (Local Search Neighborhood \in {Full, Reduced, CriticalReduced}) and eigthth (Local Search Strategy \in {Best Improvement, First Improvement}) parameters.
 	- Example Usage
     
-      		./FJS -i DAFJS01.txt -o LocalSearchReducedNeiBestImprovECT-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he ECT -mh None
+      		./FJS -i DAFJS01.txt -o LocalSearchReducedNeiBestImprovECT-outout.csv -t 60 -a -0.3 -s 91287 -ls Reduced -lse Best -he ECT -mh None -tol 0 -c 0
     
   - Metaheuristics:
    	For the metaheuristics we have the common parameters 10, 11 and 12, which stands for a tolerance, criticalOperations, and max number of iterations, respectively.
